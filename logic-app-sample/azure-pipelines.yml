@@ -1,0 +1,123 @@
+parameters:
+  - name: environment
+    displayName: 'Deployment Environment'
+    type: string
+    default: 'dev'
+    values:
+      - dev
+      - test
+      - prod
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+resources:
+  repositories:
+    - repository: logicAppCode
+      type: git
+      name: enrollment-app
+      ref: refs/heads/main
+
+variables:
+  # Logic App name (same across all environments)
+  logicAppName: 'logic-enrollment-app'
+
+  # Agent VM image name
+  vmImageName: 'ubuntu-latest'
+
+  # Working Directory (enrollment-logic-app folder within the repository)
+  workingDirectory: '$(System.DefaultWorkingDirectory)/enrollment-logic-app'
+
+  # Environment-specific service connection
+  ${{ if eq(parameters.environment, 'dev') }}:
+    azureSubscription: 'azure-rm-connection-dev'
+    environmentName: 'development'
+  ${{ if eq(parameters.environment, 'test') }}:
+    azureSubscription: 'azure-rm-connection-test'
+    environmentName: 'testing'
+  ${{ if eq(parameters.environment, 'prod') }}:
+    azureSubscription: 'azure-rm-connection-prod'
+    environmentName: 'production'
+
+stages:
+- stage: Build
+  displayName: Build and Package
+  jobs:
+  - job: BuildAndPackage
+    displayName: Build and Package
+    pool:
+      vmImage: $(vmImageName)
+
+    steps:
+    - checkout: logicAppCode
+      displayName: 'Checkout logic app code'
+
+    - bash: |
+        echo "Validating Logic App structure..."
+        if [ ! -f "host.json" ]; then
+          echo "Error: host.json not found!"
+          exit 1
+        fi
+        if [ ! -f "connections.json" ]; then
+          echo "Error: connections.json not found!"
+          exit 1
+        fi
+
+        # Count workflows
+        workflow_count=$(find . -maxdepth 2 -name "workflow.json" | wc -l)
+        echo "Found $workflow_count workflow(s)"
+
+        if [ $workflow_count -eq 0 ]; then
+          echo "Warning: No workflows found!"
+        fi
+
+        # List all workflows
+        echo "Workflows:"
+        find . -maxdepth 2 -name "workflow.json" -exec dirname {} \; | sort
+      workingDirectory: $(workingDirectory)
+      displayName: 'Validate Logic App structure'
+
+    - bash: |
+        echo "Listing files to be packaged:"
+        ls -R
+      workingDirectory: $(workingDirectory)
+      displayName: 'List package contents'
+
+    - task: ArchiveFiles@2
+      displayName: 'Archive Logic App files'
+      inputs:
+        rootFolderOrFile: '$(workingDirectory)'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+        replaceExistingArchive: true
+
+    - publish: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+      artifact: drop
+      displayName: 'Publish artifact'
+
+- stage: Deploy
+  displayName: 'Deploy to ${{ parameters.environment }}'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: Deploy
+    displayName: 'Deploy to ${{ parameters.environment }}'
+    environment: '$(environmentName)'
+    pool:
+      vmImage: $(vmImageName)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureFunctionApp@1
+            displayName: 'Deploy Logic App to ${{ parameters.environment }}'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appType: 'functionApp'
+              appName: '$(logicAppName)'
+              package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
+              deploymentMethod: 'zipDeploy'

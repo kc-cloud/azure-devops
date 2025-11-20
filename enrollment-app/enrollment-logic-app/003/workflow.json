@@ -1,0 +1,68 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "actions": {
+      "Initialize_Notification": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "NotificationMessage",
+              "type": "string",
+              "value": "Enrollment confirmation notification"
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "http",
+        "inputs": {
+          "statusCode": 200,
+          "body": {
+            "message": "Workflow 003 - Enrollment Notification Sent",
+            "workflowId": "003",
+            "notificationMessage": "@variables('NotificationMessage')",
+            "recipient": "@triggerBody()?['email']",
+            "timestamp": "@utcNow()",
+            "status": "success"
+          },
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        },
+        "runAfter": {
+          "Initialize_Notification": [
+            "Succeeded"
+          ]
+        }
+      }
+    },
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "studentId": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "enrollmentId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "contentVersion": "1.0.0.0",
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

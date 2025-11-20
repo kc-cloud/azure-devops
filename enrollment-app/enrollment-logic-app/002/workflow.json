@@ -1,0 +1,59 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "actions": {
+      "Compose_Verification_Data": {
+        "type": "Compose",
+        "inputs": {
+          "studentId": "@triggerBody()?['studentId']",
+          "verificationStatus": "verified",
+          "verifiedAt": "@utcNow()"
+        },
+        "runAfter": {}
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "http",
+        "inputs": {
+          "statusCode": 200,
+          "body": {
+            "message": "Workflow 002 - Enrollment Verification Complete",
+            "workflowId": "002",
+            "verificationData": "@outputs('Compose_Verification_Data')",
+            "status": "success"
+          },
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        },
+        "runAfter": {
+          "Compose_Verification_Data": [
+            "Succeeded"
+          ]
+        }
+      }
+    },
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "studentId": {
+                "type": "string"
+              },
+              "enrollmentId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "contentVersion": "1.0.0.0",
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

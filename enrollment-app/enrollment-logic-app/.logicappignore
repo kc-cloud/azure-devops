@@ -1,0 +1,15 @@
+.git*
+.vscode
+local.settings.json
+test
+.DS_Store
+*.md
+README.md
+.funcignore
+.gitignore
+__pycache__
+*.pyc
+.python_packages
+obj
+bin
+.debug
