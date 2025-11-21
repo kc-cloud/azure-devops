@@ -28,14 +28,19 @@ variables:
   # Function app name (same across all environments)
   functionAppName: 'azfn-test'
 
-  # Agent VM image name
-  vmImageName: 'ubuntu-latest'
+  # Agent pool name (self-hosted RHEL 8)
+  agentPoolName: 'Default'  # Update this to your agent pool name
 
   # Working Directory (enrollment-function-app folder within the repository)
   workingDirectory: '$(System.DefaultWorkingDirectory)/enrollment-function-app'
 
   # Python version
   pythonVersion: '3.12'
+
+  # ACR configuration (update these values)
+  acrName: 'your-acr-name'
+  acrServiceConnection: 'your-acr-service-connection'
+  containerImage: '$(acrName).azurecr.io/python-azure-builder:3.12'
 
   # Environment-specific service connection
   ${{ if eq(parameters.environment, 'dev') }}:
@@ -55,30 +60,17 @@ stages:
   - job: BuildAndTest
     displayName: Build and Test
     pool:
-      vmImage: $(vmImageName)
+      name: $(agentPoolName)
     container:
-      image: ubuntu:latest
-      options: "-u 0"
+      image: $(containerImage)
+      endpoint: $(acrServiceConnection)
 
     steps:
     - checkout: functionAppCode
       displayName: 'Checkout function app code'
 
     - bash: |
-        apt-get update && apt-get install -y \
-          python$(pythonVersion) \
-          python3-pip \
-          zip \
-          gcc \
-          g++ \
-          make \
-          libffi-dev \
-          libssl-dev
-      displayName: 'Install Python and build dependencies'
-
-    - bash: |
         pip install -r requirements.txt
-        pip install pytest pytest-cov
       workingDirectory: $(workingDirectory)
       displayName: 'Install dependencies'
 
@@ -129,7 +121,7 @@ stages:
   - job: Deploy
     displayName: 'Deploy to ${{ parameters.environment }}'
     pool:
-      vmImage: $(vmImageName)
+      name: $(agentPoolName)
     steps:
     - task: UsePythonVersion@0
       displayName: 'Use Python $(pythonVersion)'
