@@ -56,15 +56,11 @@ stages:
     displayName: Build and Test
     pool:
       vmImage: $(vmImageName)
+    container: python:$(pythonVersion)-slim
 
     steps:
     - checkout: functionAppCode
       displayName: 'Checkout function app code'
-
-    - task: UsePythonVersion@0
-      displayName: 'Use Python $(pythonVersion)'
-      inputs:
-        versionSpec: $(pythonVersion)
 
     - bash: |
         pip install -r requirements.txt
