@@ -35,7 +35,7 @@ variables:
   workingDirectory: '$(System.DefaultWorkingDirectory)/enrollment-function-app'
 
   # Python version
-  pythonVersion: '3.11'
+  pythonVersion: '3.12'
 
   # Environment-specific service connection
   ${{ if eq(parameters.environment, 'dev') }}:
@@ -56,11 +56,25 @@ stages:
     displayName: Build and Test
     pool:
       vmImage: $(vmImageName)
-    container: python:$(pythonVersion)-slim
+    container:
+      image: ubuntu:latest
+      options: "-u 0"
 
     steps:
     - checkout: functionAppCode
       displayName: 'Checkout function app code'
+
+    - bash: |
+        apt-get update && apt-get install -y \
+          python$(pythonVersion) \
+          python3-pip \
+          zip \
+          gcc \
+          g++ \
+          make \
+          libffi-dev \
+          libssl-dev
+      displayName: 'Install Python and build dependencies'
 
     - bash: |
         pip install -r requirements.txt
