@@ -7,6 +7,10 @@ parameters:
       - dev
       - test
       - prod
+  - name: branchName
+    displayName: 'Branch to Deploy (for manual runs)'
+    type: string
+    default: 'main'
 
 trigger:
   branches:
@@ -19,7 +23,10 @@ resources:
     - repository: functionAppCode
       type: git
       name: enrollment-app
-      ref: refs/heads/main
+      ref: ${{ if eq(variables['Build.Reason'], 'Manual') }}:
+        refs/heads/${{ parameters.branchName }}
+      ${{ else }}:
+        $(Build.SourceBranch)
 
 variables:
   # Function app name (same across all environments)
@@ -34,16 +41,26 @@ variables:
   # Python version
   pythonVersion: '3.11'
 
+  # Determine target environment based on trigger type
+  ${{ if eq(variables['Build.Reason'], 'Manual') }}:
+    targetEnvironment: ${{ parameters.environment }}
+  ${{ else }}:
+    targetEnvironment: 'dev'
+
   # Environment-specific service connection
-  ${{ if eq(parameters.environment, 'dev') }}:
+  ${{ if eq(variables['Build.Reason'], 'Manual') }}:
+    ${{ if eq(parameters.environment, 'dev') }}:
+      azureSubscription: 'azure-rm-connection-dev'
+      environmentName: 'development'
+    ${{ if eq(parameters.environment, 'test') }}:
+      azureSubscription: 'azure-rm-connection-test'
+      environmentName: 'testing'
+    ${{ if eq(parameters.environment, 'prod') }}:
+      azureSubscription: 'azure-rm-connection-prod'
+      environmentName: 'production'
+  ${{ else }}:
     azureSubscription: 'azure-rm-connection-dev'
     environmentName: 'development'
-  ${{ if eq(parameters.environment, 'test') }}:
-    azureSubscription: 'azure-rm-connection-test'
-    environmentName: 'testing'
-  ${{ if eq(parameters.environment, 'prod') }}:
-    azureSubscription: 'azure-rm-connection-prod'
-    environmentName: 'production'
 
 stages:
 - stage: Build
@@ -91,10 +108,6 @@ stages:
         summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage.xml'
 
     - bash: |
-        if [ -f extensions.csproj ]
-        then
-            dotnet build extensions.csproj --output ./bin
-        fi
         pip install --target="./.python_packages/lib/site-packages" -r ./requirements.txt
       workingDirectory: $(workingDirectory)
       displayName: 'Install deployment dependencies'
@@ -113,12 +126,12 @@ stages:
       displayName: 'Publish artifact'
 
 - stage: Deploy
-  displayName: 'Deploy to ${{ parameters.environment }}'
+  displayName: 'Deploy to $(targetEnvironment)'
   dependsOn: Build
   condition: succeeded()
   jobs:
   - deployment: Deploy
-    displayName: 'Deploy to ${{ parameters.environment }}'
+    displayName: 'Deploy to $(targetEnvironment)'
     environment: '$(environmentName)'
     pool:
       vmImage: $(vmImageName)
@@ -132,7 +145,7 @@ stages:
               versionSpec: $(pythonVersion)
 
           - task: AzureFunctionApp@1
-            displayName: 'Deploy Azure Function App to ${{ parameters.environment }}'
+            displayName: 'Deploy Azure Function App to $(targetEnvironment)'
             inputs:
               azureSubscription: '$(azureSubscription)'
               appType: 'functionAppLinux'
