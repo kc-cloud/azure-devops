@@ -215,8 +215,8 @@ stages:
 
                 echo "Starting deployment..."
 
-                # Deploy with verbose output
-                az logicapp deployment source config-zip \
+                # Deploy using functionapp command (works with Logic Apps Standard)
+                az functionapp deployment source config-zip \
                   --resource-group $(azureSubscription) \
                   --name $(logicAppName) \
                   --src "$(Pipeline.Workspace)/logic-app/$(Build.BuildId).zip"
@@ -240,32 +240,50 @@ stages:
                 echo "Verifying deployment via Kudu API..."
 
                 # Get publishing credentials
-                KUDU_CREDS=$(az webapp deployment list-publishing-credentials \
+                echo "Getting publishing credentials..."
+                PUBLISH_PROFILE=$(az webapp deployment list-publishing-credentials \
                   --resource-group $(azureSubscription) \
                   --name $(logicAppName) \
-                  --query "{username:publishingUserName, password:publishingPassword}" -o json)
+                  --query "{username:publishingUserName, password:publishingPassword}" -o json 2>/dev/null)
 
-                KUDU_USER=$(echo $KUDU_CREDS | jq -r '.username')
-                KUDU_PASS=$(echo $KUDU_CREDS | jq -r '.password')
+                if [ $? -eq 0 ] && [ -n "$PUBLISH_PROFILE" ]; then
+                  KUDU_USER=$(echo $PUBLISH_PROFILE | jq -r '.username')
+                  KUDU_PASS=$(echo $PUBLISH_PROFILE | jq -r '.password')
 
-                echo "Checking wwwroot directory structure via Kudu..."
-                curl -u "$KUDU_USER:$KUDU_PASS" \
-                  "https://$(logicAppName).scm.azurewebsites.net/api/vfs/site/wwwroot/" \
-                  2>/dev/null | jq -r '.[].name' || echo "Could not access Kudu API"
+                  echo "Checking wwwroot directory structure via Kudu..."
+                  KUDU_RESPONSE=$(curl -s -u "$KUDU_USER:$KUDU_PASS" \
+                    "https://$(logicAppName).scm.azurewebsites.net/api/vfs/site/wwwroot/")
+
+                  if echo "$KUDU_RESPONSE" | jq -e . >/dev/null 2>&1; then
+                    echo "Files in wwwroot:"
+                    echo "$KUDU_RESPONSE" | jq -r '.[].name' 2>/dev/null || echo "$KUDU_RESPONSE"
+                  else
+                    echo "Kudu API response (not JSON):"
+                    echo "$KUDU_RESPONSE" | head -20
+                  fi
+
+                  echo ""
+                  echo "Checking for workflows directory..."
+                  WORKFLOWS_RESPONSE=$(curl -s -u "$KUDU_USER:$KUDU_PASS" \
+                    "https://$(logicAppName).scm.azurewebsites.net/api/vfs/site/wwwroot/workflows/")
+
+                  if echo "$WORKFLOWS_RESPONSE" | jq -e . >/dev/null 2>&1; then
+                    echo "Workflows found:"
+                    echo "$WORKFLOWS_RESPONSE" | jq -r '.[].name' 2>/dev/null
+                  else
+                    echo "Workflows directory not accessible or doesn't exist"
+                  fi
+                else
+                  echo "Could not get publishing credentials"
+                fi
 
                 echo ""
-                echo "Checking for workflows directory..."
-                curl -u "$KUDU_USER:$KUDU_PASS" \
-                  "https://$(logicAppName).scm.azurewebsites.net/api/vfs/site/wwwroot/workflows/" \
-                  2>/dev/null | jq -r '.[].name' || echo "Workflows directory not found or inaccessible"
-
-                echo ""
-                # List workflows to verify deployment
-                echo "Listing workflows via Azure API..."
-                az logicapp workflow list \
-                  --resource-group $(azureSubscription) \
-                  --name $(logicAppName) \
-                  --query "[].name" -o tsv || echo "Could not list workflows"
+                echo "Verifying workflows via Azure REST API..."
+                # Use az rest instead of az logicapp workflow (more compatible)
+                SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+                az rest --method get \
+                  --url "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$(azureSubscription)/providers/Microsoft.Web/sites/$(logicAppName)/workflows?api-version=2022-03-01" \
+                  --query "value[].name" -o tsv 2>/dev/null || echo "Could not list workflows via API"
 
                 echo ""
                 echo "Deployment verification completed!"
