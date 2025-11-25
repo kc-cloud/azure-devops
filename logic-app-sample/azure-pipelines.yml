@@ -86,10 +86,41 @@ stages:
       workingDirectory: $(workingDirectory)
       displayName: 'List package contents'
 
+    - bash: |
+        echo "Restructuring files for Logic App Standard deployment..."
+
+        # Create temporary directory with correct structure
+        TEMP_DIR="$(Build.ArtifactStagingDirectory)/logicapp-temp"
+        mkdir -p "$TEMP_DIR/workflows"
+
+        # Copy root files (host.json, connections.json, etc.)
+        echo "Copying root files..."
+        cp host.json "$TEMP_DIR/" 2>/dev/null || echo "host.json not found"
+        cp connections.json "$TEMP_DIR/" 2>/dev/null || echo "connections.json not found"
+        cp local.settings.json "$TEMP_DIR/" 2>/dev/null || true
+        cp .logicappignore "$TEMP_DIR/" 2>/dev/null || true
+
+        # Move workflow folders into workflows directory
+        echo "Moving workflow folders into workflows directory..."
+        for workflow_dir in */; do
+          # Check if directory contains workflow.json
+          if [ -f "${workflow_dir}workflow.json" ]; then
+            workflow_name=$(basename "$workflow_dir")
+            echo "  Moving workflow: $workflow_name"
+            cp -r "$workflow_dir" "$TEMP_DIR/workflows/"
+          fi
+        done
+
+        echo ""
+        echo "Final structure to be deployed:"
+        ls -R "$TEMP_DIR"
+      workingDirectory: $(workingDirectory)
+      displayName: 'Restructure for Logic App deployment'
+
     - task: ArchiveFiles@2
       displayName: 'Archive Logic App files'
       inputs:
-        rootFolderOrFile: '$(workingDirectory)'
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/logicapp-temp'
         includeRootFolder: false
         archiveType: zip
         archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
@@ -117,11 +148,11 @@ stages:
             artifact: drop
             displayName: 'Download build artifact'
 
-          - task: AzureLogicApp@1
+          - task: AzureFunctionApp@1
             displayName: 'Deploy Logic App to ${{ parameters.environment }}'
             inputs:
               azureSubscription: '$(azureSubscription)'
-              appType: 'logicApp'
+              appType: 'functionApp'
               appName: '$(logicAppName)'
               package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
               deploymentMethod: 'zipDeploy'
