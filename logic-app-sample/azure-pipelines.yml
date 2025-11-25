@@ -7,10 +7,6 @@ parameters:
       - dev
       - test
       - prod
-  - name: resourceGroup
-    displayName: 'Resource Group Name'
-    type: string
-    default: 'rg-logic-app'
 
 trigger:
   branches:
@@ -170,14 +166,103 @@ stages:
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
+                echo "=========================================="
                 echo "Deploying Logic App Standard using Azure CLI..."
-                echo "Resource Group: ${{ parameters.resourceGroup }}"
+                echo "=========================================="
+                echo "Resource Group: $(azureSubscription)"
                 echo "Logic App Name: $(logicAppName)"
                 echo "Package: $(Pipeline.Workspace)/drop/$(Build.BuildId).zip"
+                echo ""
 
-                az logicapp deployment source config-zip \
-                  --resource-group ${{ parameters.resourceGroup }} \
+                # Verify the package exists
+                if [ ! -f "$(Pipeline.Workspace)/drop/$(Build.BuildId).zip" ]; then
+                  echo "ERROR: Package file not found!"
+                  exit 1
+                fi
+
+                echo "Package size: $(du -h $(Pipeline.Workspace)/drop/$(Build.BuildId).zip)"
+                echo ""
+
+                # Inspect the zip file contents
+                echo "Inspecting zip file contents..."
+                unzip -l "$(Pipeline.Workspace)/drop/$(Build.BuildId).zip" | head -30
+                echo ""
+
+                # Check if Logic App exists
+                echo "Checking if Logic App exists..."
+                az logicapp show \
+                  --resource-group $(azureSubscription) \
                   --name $(logicAppName) \
-                  --src "$(Pipeline.Workspace)/drop/$(Build.BuildId).zip"
+                  --query "name" -o tsv
 
-                echo "Deployment completed successfully!"
+                echo ""
+                echo "Checking Logic App state and configuration..."
+                az logicapp show \
+                  --resource-group $(azureSubscription) \
+                  --name $(logicAppName) \
+                  --query "{state:state, kind:kind, sku:sku.name}" -o json
+
+                echo ""
+                echo "Checking required application settings..."
+                echo "AzureWebJobsStorage: $(az logicapp config appsettings list --resource-group $(azureSubscription) --name $(logicAppName) --query "[?name=='AzureWebJobsStorage'].value" -o tsv | head -c 50)..."
+                echo "FUNCTIONS_EXTENSION_VERSION: $(az logicapp config appsettings list --resource-group $(azureSubscription) --name $(logicAppName) --query "[?name=='FUNCTIONS_EXTENSION_VERSION'].value" -o tsv)"
+                echo "FUNCTIONS_WORKER_RUNTIME: $(az logicapp config appsettings list --resource-group $(azureSubscription) --name $(logicAppName) --query "[?name=='FUNCTIONS_WORKER_RUNTIME'].value" -o tsv)"
+
+                echo ""
+                echo "Starting deployment..."
+
+                # Deploy with verbose output
+                az logicapp deployment source config-zip \
+                  --resource-group $(azureSubscription) \
+                  --name $(logicAppName) \
+                  --src "$(Pipeline.Workspace)/drop/$(Build.BuildId).zip" \
+                  --verbose
+
+                echo ""
+                echo "=========================================="
+                echo "Deployment command completed!"
+                echo "=========================================="
+                echo ""
+
+                # Restart the Logic App to ensure files are loaded
+                echo "Restarting Logic App to ensure deployment is loaded..."
+                az logicapp restart \
+                  --resource-group $(azureSubscription) \
+                  --name $(logicAppName)
+
+                echo "Logic App restarted. Waiting 15 seconds for startup..."
+                sleep 15
+
+                echo ""
+                echo "Verifying deployment via Kudu API..."
+
+                # Get publishing credentials
+                KUDU_CREDS=$(az logicapp deployment list-publishing-credentials \
+                  --resource-group $(azureSubscription) \
+                  --name $(logicAppName) \
+                  --query "{username:publishingUserName, password:publishingPassword}" -o json)
+
+                KUDU_USER=$(echo $KUDU_CREDS | jq -r '.username')
+                KUDU_PASS=$(echo $KUDU_CREDS | jq -r '.password')
+
+                echo "Checking wwwroot directory structure via Kudu..."
+                curl -u "$KUDU_USER:$KUDU_PASS" \
+                  "https://$(logicAppName).scm.azurewebsites.net/api/vfs/site/wwwroot/" \
+                  2>/dev/null | jq -r '.[].name' || echo "Could not access Kudu API"
+
+                echo ""
+                echo "Checking for workflows directory..."
+                curl -u "$KUDU_USER:$KUDU_PASS" \
+                  "https://$(logicAppName).scm.azurewebsites.net/api/vfs/site/wwwroot/workflows/" \
+                  2>/dev/null | jq -r '.[].name' || echo "Workflows directory not found or inaccessible"
+
+                echo ""
+                # List workflows to verify deployment
+                echo "Listing workflows via Azure API..."
+                az logicapp workflow list \
+                  --resource-group $(azureSubscription) \
+                  --name $(logicAppName) \
+                  --query "[].name" -o tsv || echo "Could not list workflows"
+
+                echo ""
+                echo "Deployment verification completed!"
