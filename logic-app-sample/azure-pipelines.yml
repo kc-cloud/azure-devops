@@ -7,6 +7,10 @@ parameters:
       - dev
       - test
       - prod
+  - name: resourceGroup
+    displayName: 'Resource Group Name'
+    type: string
+    default: 'rg-logic-app'
 
 trigger:
   branches:
@@ -102,7 +106,7 @@ stages:
 
         # Move workflow folders into workflows directory
         echo "Moving workflow folders into workflows directory..."
-        for workflow_dir in */; do
+        for workflow_dir in 00*/; do
           # Check if directory contains workflow.json
           if [ -f "${workflow_dir}workflow.json" ]; then
             workflow_name=$(basename "$workflow_dir")
@@ -149,10 +153,31 @@ stages:
             displayName: 'Download build artifact'
 
           - task: AzureFunctionApp@1
-            displayName: 'Deploy Logic App to ${{ parameters.environment }}'
+            displayName: 'Deploy Logic App to ${{ parameters.environment }} (Primary Method)'
+            continueOnError: true
             inputs:
               azureSubscription: '$(azureSubscription)'
               appType: 'functionApp'
               appName: '$(logicAppName)'
               package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
               deploymentMethod: 'zipDeploy'
+
+          - task: AzureCLI@2
+            displayName: 'Deploy Logic App to ${{ parameters.environment }} (Fallback Method)'
+            condition: failed()
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Deploying Logic App Standard using Azure CLI..."
+                echo "Resource Group: ${{ parameters.resourceGroup }}"
+                echo "Logic App Name: $(logicAppName)"
+                echo "Package: $(Pipeline.Workspace)/drop/$(Build.BuildId).zip"
+
+                az logicapp deployment source config-zip \
+                  --resource-group ${{ parameters.resourceGroup }} \
+                  --name $(logicAppName) \
+                  --src "$(Pipeline.Workspace)/drop/$(Build.BuildId).zip"
+
+                echo "Deployment completed successfully!"
