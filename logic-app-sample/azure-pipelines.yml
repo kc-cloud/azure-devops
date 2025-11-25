@@ -148,6 +148,18 @@ stages:
             artifact: logic-app
             displayName: 'Download build artifact'
 
+          - bash: |
+              echo "Current Azure CLI version:"
+              az --version | head -5
+              echo ""
+              echo "Upgrading Azure CLI to latest version..."
+              curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+              echo ""
+              echo "New Azure CLI version:"
+              az --version | head -5
+            displayName: 'Upgrade Azure CLI'
+            continueOnError: true
+
           # - task: AzureFunctionApp@1
           #   displayName: 'Deploy Logic App to ${{ parameters.environment }} (Primary Method)'
           #   continueOnError: true
@@ -220,6 +232,22 @@ stages:
                 az account show --query "{subscription:name, user:user.name}" -o json
 
                 echo ""
+                echo "Checking service principal role assignments on Logic App..."
+                az role assignment list \
+                  --scope "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$(azureSubscription)/providers/Microsoft.Web/sites/$(logicAppName)" \
+                  --query "[].{Role:roleDefinitionName, Principal:principalName}" -o table
+
+                echo ""
+                echo "Checking if Basic Auth is enabled for SCM..."
+                BASIC_AUTH_SCM=$(az resource show \
+                  --resource-group $(azureSubscription) \
+                  --name scm \
+                  --resource-type basicPublishingCredentialsPolicies \
+                  --parent sites/$(logicAppName) \
+                  --query "properties.allow" -o tsv 2>/dev/null || echo "unknown")
+                echo "Basic Auth SCM Status: $BASIC_AUTH_SCM"
+
+                echo ""
                 echo "Attempting deployment with extended timeout..."
 
                 # Try deployment with timeout and build-remote options
@@ -267,10 +295,45 @@ stages:
 
                   if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
                     echo "Kudu deployment successful!"
+                    DEPLOY_RESULT=0
                   else
                     echo "Kudu deployment failed with status $HTTP_STATUS"
-                    exit 1
+                    echo ""
+                    echo "=========================================="
+                    echo "Trying deployment with service principal token..."
+                    echo "=========================================="
+                    echo ""
+
+                    # Get access token for the logged-in service principal
+                    ACCESS_TOKEN=$(az account get-access-token --query accessToken -o tsv)
+
+                    echo "Deploying via Kudu API with Bearer token..."
+                    HTTP_STATUS=$(curl -X POST \
+                      -H "Authorization: Bearer $ACCESS_TOKEN" \
+                      --data-binary @"$(Pipeline.Workspace)/logic-app/$(Build.BuildId).zip" \
+                      -H "Content-Type: application/octet-stream" \
+                      -w "%{http_code}" \
+                      -o /tmp/deploy_response2.txt \
+                      "https://$(logicAppName).scm.azurewebsites.net/api/zipdeploy")
+
+                    echo "HTTP Status: $HTTP_STATUS"
+                    echo "Response:"
+                    cat /tmp/deploy_response2.txt
+                    echo ""
+
+                    if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+                      echo "Token-based deployment successful!"
+                      DEPLOY_RESULT=0
+                    else
+                      echo "All deployment methods failed!"
+                      exit 1
+                    fi
                   fi
+                fi
+
+                if [ $DEPLOY_RESULT -ne 0 ]; then
+                  echo "Deployment failed!"
+                  exit 1
                 fi
 
                 echo ""
