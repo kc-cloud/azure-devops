@@ -24,10 +24,17 @@ resources:
       name: enrollment-app
       ref: refs/heads/${{ parameters.branchName }}
 
-variables:
-  # Function app name (same across all environments)
-  functionAppName: 'azfn-test'
+  containers:
+    - container: pythonBuilder
+      type: ACR
+      azureSubscription: 'azure-rm-connection-dev'  # Your Azure RM service connection
+      resourceGroup: 'your-resource-group'  # Update with your ACR resource group
+      registry: 'your-acr-name'  # Update with your ACR name (without .azurecr.io)
+      repository: 'python-azure-builder'
+      tag: '3.12'  # Image tag
+      trigger: none
 
+variables:
   # Agent pool name (self-hosted RHEL 8)
   agentPoolName: 'Default'  # Update this to your agent pool name
 
@@ -37,21 +44,19 @@ variables:
   # Python version
   pythonVersion: '3.12'
 
-  # ACR configuration (update these values)
-  acrName: 'your-acr-name'
-  acrServiceConnection: 'your-acr-service-connection'
-  containerImage: '$(acrName).azurecr.io/python-azure-builder:3.12'
-
   # Environment-specific service connection
   ${{ if eq(parameters.environment, 'dev') }}:
     azureSubscription: 'azure-rm-connection-dev'
     environmentName: 'development'
+    functionAppName: 'azfn-test-dev'
   ${{ if eq(parameters.environment, 'test') }}:
     azureSubscription: 'azure-rm-connection-test'
     environmentName: 'testing'
+    functionAppName: 'azfn-test-test'
   ${{ if eq(parameters.environment, 'prod') }}:
     azureSubscription: 'azure-rm-connection-prod'
     environmentName: 'production'
+    functionAppName: 'azfn-test-prod'
 
 stages:
 - stage: Build
@@ -61,9 +66,7 @@ stages:
     displayName: Build and Test
     pool:
       name: $(agentPoolName)
-    container:
-      image: $(containerImage)
-      endpoint: $(acrServiceConnection)
+    container: pythonBuilder
 
     steps:
     - checkout: functionAppCode

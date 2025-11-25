@@ -113,11 +113,15 @@ stages:
       runOnce:
         deploy:
           steps:
-          - task: AzureFunctionApp@1
+          - download: current
+            artifact: drop
+            displayName: 'Download build artifact'
+
+          - task: AzureLogicApp@1
             displayName: 'Deploy Logic App to ${{ parameters.environment }}'
             inputs:
               azureSubscription: '$(azureSubscription)'
-              appType: 'functionApp'
+              appType: 'logicApp'
               appName: '$(logicAppName)'
               package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
               deploymentMethod: 'zipDeploy'
