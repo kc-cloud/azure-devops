@@ -127,7 +127,7 @@ stages:
         replaceExistingArchive: true
 
     - publish: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
-      artifact: drop
+      artifact: logic-app
       displayName: 'Publish artifact'
 
 - stage: Deploy
@@ -145,22 +145,22 @@ stages:
         deploy:
           steps:
           - download: current
-            artifact: drop
+            artifact: logic-app
             displayName: 'Download build artifact'
 
-          - task: AzureFunctionApp@1
-            displayName: 'Deploy Logic App to ${{ parameters.environment }} (Primary Method)'
-            continueOnError: true
-            inputs:
-              azureSubscription: '$(azureSubscription)'
-              appType: 'functionApp'
-              appName: '$(logicAppName)'
-              package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
-              deploymentMethod: 'zipDeploy'
+          # - task: AzureFunctionApp@1
+          #   displayName: 'Deploy Logic App to ${{ parameters.environment }} (Primary Method)'
+          #   continueOnError: true
+          #   inputs:
+          #     azureSubscription: '$(azureSubscription)'
+          #     appType: 'functionApp'
+          #     appName: '$(logicAppName)'
+          #     package: '$(Pipeline.Workspace)/logic-app/$(Build.BuildId).zip'
+          #     deploymentMethod: 'zipDeploy'
 
           - task: AzureCLI@2
             displayName: 'Deploy Logic App to ${{ parameters.environment }} (Fallback Method)'
-            condition: failed()
+            # condition: failed()
             inputs:
               azureSubscription: '$(azureSubscription)'
               scriptType: 'bash'
@@ -171,21 +171,21 @@ stages:
                 echo "=========================================="
                 echo "Resource Group: $(azureSubscription)"
                 echo "Logic App Name: $(logicAppName)"
-                echo "Package: $(Pipeline.Workspace)/drop/$(Build.BuildId).zip"
+                echo "Package: $(Pipeline.Workspace)/logic-app/$(Build.BuildId).zip"
                 echo ""
 
                 # Verify the package exists
-                if [ ! -f "$(Pipeline.Workspace)/drop/$(Build.BuildId).zip" ]; then
+                if [ ! -f "$(Pipeline.Workspace)/logic-app/$(Build.BuildId).zip" ]; then
                   echo "ERROR: Package file not found!"
                   exit 1
                 fi
 
-                echo "Package size: $(du -h $(Pipeline.Workspace)/drop/$(Build.BuildId).zip)"
+                echo "Package size: $(du -h $(Pipeline.Workspace)/logic-app/$(Build.BuildId).zip)"
                 echo ""
 
                 # Inspect the zip file contents
                 echo "Inspecting zip file contents..."
-                unzip -l "$(Pipeline.Workspace)/drop/$(Build.BuildId).zip" | head -30
+                unzip -l "$(Pipeline.Workspace)/logic-app/$(Build.BuildId).zip" | head -30
                 echo ""
 
                 # Check if Logic App exists
@@ -204,19 +204,22 @@ stages:
 
                 echo ""
                 echo "Checking required application settings..."
-                echo "AzureWebJobsStorage: $(az logicapp config appsettings list --resource-group $(azureSubscription) --name $(logicAppName) --query "[?name=='AzureWebJobsStorage'].value" -o tsv | head -c 50)..."
-                echo "FUNCTIONS_EXTENSION_VERSION: $(az logicapp config appsettings list --resource-group $(azureSubscription) --name $(logicAppName) --query "[?name=='FUNCTIONS_EXTENSION_VERSION'].value" -o tsv)"
-                echo "FUNCTIONS_WORKER_RUNTIME: $(az logicapp config appsettings list --resource-group $(azureSubscription) --name $(logicAppName) --query "[?name=='FUNCTIONS_WORKER_RUNTIME'].value" -o tsv)"
+                echo "AzureWebJobsStorage: $(az webapp config appsettings list --resource-group $(azureSubscription) --name $(logicAppName) --query "[?name=='AzureWebJobsStorage'].value" -o tsv | head -c 50)..."
+                echo "FUNCTIONS_EXTENSION_VERSION: $(az webapp config appsettings list --resource-group $(azureSubscription) --name $(logicAppName) --query "[?name=='FUNCTIONS_EXTENSION_VERSION'].value" -o tsv)"
+                echo "FUNCTIONS_WORKER_RUNTIME: $(az webapp config appsettings list --resource-group $(azureSubscription) --name $(logicAppName) --query "[?name=='FUNCTIONS_WORKER_RUNTIME'].value" -o tsv)"
 
                 echo ""
+                echo "Checking Azure CLI version..."
+                az --version
+                echo ""
+
                 echo "Starting deployment..."
 
                 # Deploy with verbose output
                 az logicapp deployment source config-zip \
                   --resource-group $(azureSubscription) \
                   --name $(logicAppName) \
-                  --src "$(Pipeline.Workspace)/drop/$(Build.BuildId).zip" \
-                  --verbose
+                  --src "$(Pipeline.Workspace)/logic-app/$(Build.BuildId).zip"
 
                 echo ""
                 echo "=========================================="
@@ -226,7 +229,7 @@ stages:
 
                 # Restart the Logic App to ensure files are loaded
                 echo "Restarting Logic App to ensure deployment is loaded..."
-                az logicapp restart \
+                az webapp restart \
                   --resource-group $(azureSubscription) \
                   --name $(logicAppName)
 
@@ -237,7 +240,7 @@ stages:
                 echo "Verifying deployment via Kudu API..."
 
                 # Get publishing credentials
-                KUDU_CREDS=$(az logicapp deployment list-publishing-credentials \
+                KUDU_CREDS=$(az webapp deployment list-publishing-credentials \
                   --resource-group $(azureSubscription) \
                   --name $(logicAppName) \
                   --query "{username:publishingUserName, password:publishingPassword}" -o json)
