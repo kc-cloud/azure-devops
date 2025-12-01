@@ -87,35 +87,28 @@ stages:
       displayName: 'List package contents'
 
     - bash: |
-        echo "Restructuring files for Logic App Standard deployment..."
+        echo "Preparing files for Logic App Standard deployment..."
 
-        # Create temporary directory with correct structure
+        # Create temporary directory
         TEMP_DIR="$(Build.ArtifactStagingDirectory)/logicapp-temp"
-        mkdir -p "$TEMP_DIR/workflows"
+        mkdir -p "$TEMP_DIR"
 
-        # Copy root files (host.json, connections.json, etc.)
-        echo "Copying root files..."
-        cp host.json "$TEMP_DIR/" 2>/dev/null || echo "host.json not found"
-        cp connections.json "$TEMP_DIR/" 2>/dev/null || echo "connections.json not found"
-        cp local.settings.json "$TEMP_DIR/" 2>/dev/null || true
-        cp .logicappignore "$TEMP_DIR/" 2>/dev/null || true
+        # Copy all files maintaining the correct structure
+        echo "Copying Logic App files..."
+        cp -r . "$TEMP_DIR/"
 
-        # Move workflow folders into workflows directory
-        echo "Moving workflow folders into workflows directory..."
-        for workflow_dir in 00*/; do
-          # Check if directory contains workflow.json
-          if [ -f "${workflow_dir}workflow.json" ]; then
-            workflow_name=$(basename "$workflow_dir")
-            echo "  Moving workflow: $workflow_name"
-            cp -r "$workflow_dir" "$TEMP_DIR/workflows/"
-          fi
-        done
+        # Remove local.settings.json (not needed for deployment)
+        echo "Removing local.settings.json from deployment package..."
+        rm -f "$TEMP_DIR/local.settings.json"
+
+        # Remove any git files if present
+        rm -rf "$TEMP_DIR/.git" "$TEMP_DIR/.gitignore"
 
         echo ""
         echo "Final structure to be deployed:"
         ls -R "$TEMP_DIR"
       workingDirectory: $(workingDirectory)
-      displayName: 'Restructure for Logic App deployment'
+      displayName: 'Prepare Logic App deployment package'
 
     - task: ArchiveFiles@2
       displayName: 'Archive Logic App files'
