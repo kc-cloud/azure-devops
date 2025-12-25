@@ -1,0 +1,141 @@
+{
+  "title": "Enterprise Technology Radar",
+  "quadrants": [
+    {
+      "id": "languages-frameworks",
+      "name": "Languages & Frameworks"
+    },
+    {
+      "id": "platforms",
+      "name": "Platforms"
+    },
+    {
+      "id": "tools",
+      "name": "Tools"
+    },
+    {
+      "id": "techniques",
+      "name": "Techniques"
+    }
+  ],
+  "rings": [
+    {
+      "id": "adopt",
+      "name": "Adopt",
+      "color": "#5ba300"
+    },
+    {
+      "id": "trial",
+      "name": "Trial",
+      "color": "#009eb0"
+    },
+    {
+      "id": "assess",
+      "name": "Assess",
+      "color": "#c7ba00"
+    },
+    {
+      "id": "hold",
+      "name": "Hold",
+      "color": "#e09b96"
+    }
+  ],
+  "entries": [
+    {
+      "id": "java-spring-boot",
+      "title": "Java Spring Boot",
+      "quadrant": "languages-frameworks",
+      "ring": "adopt",
+      "description": "Primary framework for building and maintaining over 450 production-grade microservices. Provides strong ecosystem support, security, observability, and long-term stability.",
+      "active": true
+    },
+    {
+      "id": "microservices-architecture",
+      "title": "Microservices Architecture",
+      "quadrant": "techniques",
+      "ring": "adopt",
+      "description": "Service-oriented architecture enabling independent deployment, scalability, and team autonomy across hundreds of services.",
+      "active": true
+    },
+    {
+      "id": "azure-aks",
+      "title": "Azure Kubernetes Service (AKS)",
+      "quadrant": "platforms",
+      "ring": "adopt",
+      "description": "Core container orchestration platform used for deploying and scaling all microservices workloads in Azure.",
+      "active": true
+    },
+    {
+      "id": "azure-key-vault",
+      "title": "Azure Key Vault",
+      "quadrant": "platforms",
+      "ring": "adopt",
+      "description": "Centralized secrets, keys, and certificate management solution integrated with applications and CI/CD pipelines.",
+      "active": true
+    },
+    {
+      "id": "azure-blob-storage",
+      "title": "Azure Blob Storage",
+      "quadrant": "platforms",
+      "ring": "adopt",
+      "description": "Used for storing unstructured data such as documents, logs, and application artifacts with high durability and availability.",
+      "active": true
+    },
+    {
+      "id": "postgres-flex",
+      "title": "Azure PostgreSQL Flexible Server",
+      "quadrant": "platforms",
+      "ring": "adopt",
+      "description": "Managed PostgreSQL database service used for transactional workloads requiring open-source compatibility and scalability.",
+      "active": true
+    },
+    {
+      "id": "azure-sql",
+      "title": "Azure SQL Server",
+      "quadrant": "platforms",
+      "ring": "adopt",
+      "description": "Relational database platform supporting enterprise workloads with high availability, security, and performance.",
+      "active": true
+    },
+    {
+      "id": "oracle-database",
+      "title": "Oracle Database",
+      "quadrant": "platforms",
+      "ring": "hold",
+      "description": "Legacy enterprise database still in use for critical systems. No new development is recommended unless required by existing constraints.",
+      "active": true
+    },
+    {
+      "id": "azure-apim",
+      "title": "Azure API Management (APIM)",
+      "quadrant": "tools",
+      "ring": "adopt",
+      "description": "API gateway and management layer providing security, throttling, monitoring, and developer onboarding capabilities.",
+      "active": true
+    },
+    {
+      "id": "tibco",
+      "title": "TIBCO Integration Suite",
+      "quadrant": "tools",
+      "ring": "hold",
+      "description": "Middleware and integration platform primarily used for legacy integrations. Gradual modernization is recommended.",
+      "active": true
+    },
+    {
+      "id": "containerization",
+      "title": "Containerization (Docker)",
+      "quadrant": "techniques",
+      "ring": "adopt",
+      "description": "Standard packaging approach for all services to ensure consistency across development, testing, and production environments.",
+      "active": true
+    },
+    {
+      "id": "cloud-native-design",
+      "title": "Cloud-Native Design",
+      "quadrant": "techniques",
+      "ring": "adopt",
+      "description": "Design principles focused on scalability, resilience, and observability, leveraging managed cloud services and Kubernetes.",
+      "active": true
+    }
+  ]
+}
