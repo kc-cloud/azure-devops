@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ado-agent
+  namespace: ado-agents
+  labels:
+    app: ado-agent
+spec:
+  replicas: 12   # match your parallel job license count
+
+  selector:
+    matchLabels:
+      app: ado-agent
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0   # never drop below license count during updates
+
+  template:
+    metadata:
+      labels:
+        app: ado-agent
+    spec:
+      serviceAccountName: ado-agent
+      terminationGracePeriodSeconds: 300   # gives a running job up to 5 min to finish
+
+      containers:
+        - name: ado-agent
+          image: <YOUR_REGISTRY>/ado-agent:latest   # built from docker/Dockerfile
+          imagePullPolicy: Always
+
+          envFrom:
+            - configMapRef:
+                name: ado-agent-config
+
+          env:
+            - name: AZP_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ado-agent-secret
+                  key: AZP_URL
+            - name: AZP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ado-agent-secret
+                  key: AZP_TOKEN
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+
+          # Remove volumeMounts + volumes below if pipelines don't need docker build
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ado-agent-config
+  namespace: ado-agents
+data:
+  AZP_POOL: "Default"          # Change to your agent pool name
+  AZP_AGENT_NAME: ""           # Leave empty to use pod hostname (unique per pod)
